@@ -1,7 +1,14 @@
 from .base_sv import Metric_sv
 from dataset.basergbdataset import BaseRGBDataet, TrackerResult
-
+from vot.region.shapes import Rectangle
+from vot.cal_enus import compute_ENUS1
 from tool.utils import *
+
+
+class Sequence():
+    def __init__(self, gt):
+        self.groundtruth = [Rectangle(per_gt[0], per_gt[1], per_gt[2], per_gt[3]) for per_gt in gt]
+        self.size = (320, 320)
 
 
 class MPR(Metric_sv):
@@ -39,6 +46,42 @@ class MPR(Metric_sv):
         return pr_val, pr
 
 
+class ENUS(Metric_sv):
+    """
+    NOTE
+    ---------
+    Maximum Precision Rate (MPR). PR is the percentage of frames whose output location
+    is within the given threshold distance of ground truth. That is to say, it computes
+    the average Euclidean distance between the center locations of the tracked target
+    and the manually labeled ground-truth positions of all the frames. Although our
+    alignment between two modalities is highly accurate, there still exist small alignment
+    errors. Therefore, we use maximum precision rate (MPR) instead of PR in this paper.
+    Specifically, for each frame, we compute the above Euclidean distance on both RGB and
+    thermal modalities, and adopt the smaller distance to compute the precision.
+    We set the threshold to be 20 pixels to obtain the representative MPR.
+    """
+
+    def __init__(self, thr=np.linspace(0, 1, 51)) -> None:
+        super().__init__()
+
+        self.thr = thr
+
+    def __call__(self, dataset: BaseRGBDataet, result: TrackerResult, seqs: list):
+        enus = []
+        for seq_name in seqs:
+            gt_v = dataset[seq_name]
+            serial = result[seq_name]
+            gt = Sequence(gt_v)
+            serial = [Rectangle(per_serial[0], per_serial[1], per_serial[2], per_serial[3]) for per_serial in serial]
+            # res = np.array(serial_process(IoU, serial, gt_v))
+
+            enus.append(compute_ENUS1(serial, gt, thr=self.thr)[0])
+
+        enus = np.array(enus)
+        enus_val = enus.mean()
+        return enus_val, enus
+
+
 class MSR(Metric_sv):
     """
     NOTE
@@ -69,8 +112,6 @@ class MSR(Metric_sv):
         sr = np.array(sr)
         sr_val = sr.mean()
         return sr_val, sr
-
-
 
 
 class PR(Metric_sv):
